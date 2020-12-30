@@ -1,0 +1,8 @@
+name        = "Outage"
+source_dir  = "source"
+output_dir  = "output"
+description = [=[Light source intensity and color changes are limited so that they never exceed the original value. This mainly concerns power failures.]=]
+image       = "preview.jpg"
+tag_modtype = "Look and Feel"
+tag_support = "Must be run on Server"
+publish_id = "8ae093ea"
