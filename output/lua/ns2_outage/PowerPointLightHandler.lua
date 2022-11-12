@@ -105,15 +105,20 @@ do
     end
 
     do
-        local cache = {}
+        local colorCache = {}
+        setmetatable(colorCache, {__mode = "v"})  -- make values weak
         clampColor = function(newColor, originalColor)
-            local key = originalColor --originalColor.r .. originalColor.g .. originalColor.b .. newColor.a
-            if not cache[key] then
+
+            PROFILE("PowerPointLightHandler:SetLight-clampColor")
+
+            local key = originalColor.r .. "-" .. originalColor.g .. "-" .. originalColor.b .. "-" .. newColor.r .. "-" .. newColor.g .. "-" .. newColor.b
+            if not colorCache[key] then
                 local oH, oS, oL = rgbToHsl(originalColor.r, originalColor.g, originalColor.b)
-                local cR, cG, cB = hslToRgb(oH, oS, oL * 0.1)
-                cache[key] = Color(cR, cG, cB, newColor.a)
+                local _, _, nL = rgbToHsl(newColor.r, newColor.g, newColor.b)
+                local cR, cG, cB = hslToRgb(oH, oS, math.min(nL, oL, 0.1))
+                colorCache[key] = Color(cR, cG, cB, newColor.a)
             end
-            return cache[key]
+            return colorCache[key]
         end
     end
 end
