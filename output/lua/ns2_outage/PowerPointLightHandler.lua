@@ -123,7 +123,7 @@ do
     end
 end
 
---local enabled = true
+local enabled = true
 
 --[[
 Set the intensity and color for a light. If the renderlight is ambient, we set the color
@@ -134,14 +134,14 @@ local function SetLight(renderLight, intensity, color)
     PROFILE("PowerPointLightHandler:SetLight")
 
     if intensity then
-        --if enabled then
+        if enabled then
             renderLight:SetIntensity(math.min(intensity, renderLight.originalIntensity))
-        --else
-        --    renderLight:SetIntensity(intensity)
-        --end
+        else
+            renderLight:SetIntensity(intensity)
+        end
     end
     if color then
-        --if enabled then
+        if enabled then
             renderLight:SetColor(clampColor(color, renderLight.originalColor))
             if renderLight:GetType() == RenderLight.Type_AmbientVolume then
                 renderLight:SetDirectionalColor(RenderLight.Direction_Right, clampColor(color, renderLight.originalRight))
@@ -151,17 +151,17 @@ local function SetLight(renderLight, intensity, color)
                 renderLight:SetDirectionalColor(RenderLight.Direction_Forward, clampColor(color, renderLight.originalForward))
                 renderLight:SetDirectionalColor(RenderLight.Direction_Backward, clampColor(color, renderLight.originalBackward))
             end
-        --else
-        --    renderLight:SetColor(color)
-        --    if renderLight:GetType() == RenderLight.Type_AmbientVolume then
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Right, color)
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Left, color)
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Up, color)
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Down, color)
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Forward, color)
-        --        renderLight:SetDirectionalColor(RenderLight.Direction_Backward, color)
-        --    end
-        --end
+        else
+            renderLight:SetColor(color)
+            if renderLight:GetType() == RenderLight.Type_AmbientVolume then
+                renderLight:SetDirectionalColor(RenderLight.Direction_Right, color)
+                renderLight:SetDirectionalColor(RenderLight.Direction_Left, color)
+                renderLight:SetDirectionalColor(RenderLight.Direction_Up, color)
+                renderLight:SetDirectionalColor(RenderLight.Direction_Down, color)
+                renderLight:SetDirectionalColor(RenderLight.Direction_Forward, color)
+                renderLight:SetDirectionalColor(RenderLight.Direction_Backward, color)
+            end
+        end
     end
 
 end
@@ -169,22 +169,24 @@ end
 debug.setupvaluex(NormalLightWorker.Run, "SetLight", SetLight, true)
 debug.setupvaluex(DamagedLightWorker.Run, "SetLight", SetLight, true)
 debug.setupvaluex(LowPowerLightWorker.Run, "SetLight", SetLight, true)
-debug.setupvaluex(NoPowerLightWorker.Run, "SetLight", SetLight, true)
+-- not necessary since we replace the whole function later
+-- debug.setupvaluex(NoPowerLightWorker.Run, "SetLight", SetLight, true)
 debug.setupvaluex(LightGroup.RunCycle, "SetLight", SetLight, true)
 
---Event.Hook("Console_outage_mod", function(arg1, arg)
---    enabled = not enabled
---    if enabled then
---        Print("Outage enabled")
---    else
---        Print("Outage disabled")
---    end
---end)
+Event.Hook("Console_outage", function()
+    if Shared.GetCheatsEnabled() then
+        enabled = not enabled
+        if enabled then
+            Print("[Outage MOD] enabled")
+        else
+            Print("[Outage MOD] disabled")
+        end
+    end
+end)
 
-local kMinCommanderLightIntensityScalar = 0.3
-local kOffTime = 12
-local disabledColor = 0.2
+-- replace
 function NoPowerLightWorker:Run()
+    local kOffTime = 12
 
     PROFILE("NoPowerLightWorker:Run")
 
@@ -195,6 +197,7 @@ function NoPowerLightWorker:Run()
     local probeTint
 
     if self.activeProbes then
+        local disabledColor = 0.2
         if timePassed < kOffTime then
             probeTint = Color(0, 0, 0, 1)
         elseif timePassed < kOffTime + PowerPoint.kAuxPowerCycleTime then
@@ -206,17 +209,26 @@ function NoPowerLightWorker:Run()
             -- and scalar goes 0->1
             local scalar = math.sin(angleRad)
 
-            probeTint = Color(disabledColor * scalar,
-                    disabledColor * scalar,
-                    disabledColor * scalar,
-                    1)
+            if enabled then
+                local disabledColorScaled = disabledColor * scalar
+                probeTint = Color(disabledColorScaled, disabledColorScaled, disabledColorScaled, 1)
+            else
+                probeTint = Color(PowerPoint.kDisabledColor.r * scalar,
+                        PowerPoint.kDisabledColor.g * scalar,
+                        PowerPoint.kDisabledColor.b * scalar,
+                        1)
+            end
         else
 
             -- It's possible the player wasn't close enough to the room, and thus the probes never
             -- changed to the no power state.  Do one last update to ensure they're up-to-date.
-            probeTint = Color(disabledColor,
-                    disabledColor,
-                    disabledColor, 1)
+            if enabled then
+                probeTint = Color(disabledColor, disabledColor, disabledColor, 1)
+            else
+                probeTint = Color(PowerPoint.kDisabledColor.r,
+                        PowerPoint.kDisabledColor.g,
+                        PowerPoint.kDisabledColor.b, 1)
+            end
 
             self.activeProbes = false
         end
@@ -229,6 +241,8 @@ function NoPowerLightWorker:Run()
     end
 
     self.handler:SetEmissiveModValue(0)
+
+    local kMinCommanderLightIntensityScalar = 0.3
 
     for renderLight in self.activeLights:Iterate() do
 
