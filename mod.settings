@@ -1,7 +1,11 @@
 name        = "Outage"
 source_dir  = "source"
 output_dir  = "output"
-description = [=[Darker outage with original lights]=]
+description = [=[Outage with original lights.
+
+
+
+Toggle to the original lighting with the console command outage. Only available with cheats on.]=]
 image       = "preview.jpg"
 tag_modtype = "Look and Feel"
 tag_support = "Must be run on Server"
