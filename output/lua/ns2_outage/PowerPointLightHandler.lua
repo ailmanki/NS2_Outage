@@ -180,3 +180,124 @@ debug.setupvaluex(LightGroup.RunCycle, "SetLight", SetLight, true)
 --        Print("Outage disabled")
 --    end
 --end)
+
+local kMinCommanderLightIntensityScalar = 0.3
+local kOffTime = 12
+local disabledColor = 0.2
+function NoPowerLightWorker:Run()
+
+    PROFILE("NoPowerLightWorker:Run")
+
+    local timeOfChange = self.handler.powerPoint:GetTimeOfLightModeChange()
+    local time = Shared.GetTime()
+    local timePassed = time - timeOfChange
+
+    local probeTint
+
+    if self.activeProbes then
+        if timePassed < kOffTime then
+            probeTint = Color(0, 0, 0, 1)
+        elseif timePassed < kOffTime + PowerPoint.kAuxPowerCycleTime then
+
+            -- Fade red in smoothly. t will stay at zero during the individual delay time
+            local t = timePassed - kOffTime
+            -- angle goes from zero to 90 degres in one kAuxPowerCycleTime
+            local angleRad = (t / PowerPoint.kAuxPowerCycleTime) * math.pi / 2
+            -- and scalar goes 0->1
+            local scalar = math.sin(angleRad)
+
+            probeTint = Color(disabledColor * scalar,
+                    disabledColor * scalar,
+                    disabledColor * scalar,
+                    1)
+        else
+
+            -- It's possible the player wasn't close enough to the room, and thus the probes never
+            -- changed to the no power state.  Do one last update to ensure they're up-to-date.
+            probeTint = Color(disabledColor,
+                    disabledColor,
+                    disabledColor, 1)
+
+            self.activeProbes = false
+        end
+    end
+
+    if probeTint then
+        for _, probe in ipairs(self.handler.probeTable) do
+            probe:SetTint( probeTint )
+        end
+    end
+
+    self.handler:SetEmissiveModValue(0)
+
+    for renderLight in self.activeLights:Iterate() do
+
+        local randomValue = renderLight.randomValue
+        -- aux light starting to come on
+        local startAuxLightTime = kOffTime + randomValue * PowerPoint.kMaxAuxLightDelay
+        -- ... fully on
+        local fullAuxLightTime = startAuxLightTime + PowerPoint.kAuxPowerCycleTime
+
+        local intensity
+        local color
+
+        local showCommanderLight = false
+
+        local player = Client.GetLocalPlayer()
+        if player and player:isa("Commander") then
+            showCommanderLight = true
+        end
+
+        if timePassed < startAuxLightTime then
+
+            if showCommanderLight then
+                intensity = renderLight.originalIntensity * kMinCommanderLightIntensityScalar
+            else
+                intensity = 0
+            end
+
+        elseif timePassed < fullAuxLightTime then
+
+            -- Fade red in smoothly. t will stay at zero during the individual delay time
+            local t = timePassed - startAuxLightTime
+            -- angle goes from zero to 90 degres in one kAuxPowerCycleTime
+            local angleRad = (t / PowerPoint.kAuxPowerCycleTime) * math.pi / 2
+            -- and scalar goes 0->1
+            local scalar = math.sin(angleRad)
+
+            if showCommanderLight then
+                scalar = math.max(kMinCommanderLightIntensityScalar, scalar)
+            end
+
+            intensity = scalar * renderLight.originalIntensity
+
+            intensity = intensity * self:CheckFlicker(renderLight, PowerPoint.kAuxFlickerChance, scalar)
+
+            if showCommanderLight then
+                color = PowerPoint.kDisabledCommanderColor
+            else
+                color = PowerPoint.kDisabledColor
+            end
+
+        else
+
+            -- Deactivate from initial state
+            self.activeLights:Remove(renderLight)
+
+            -- in steady state, we shift lights between a constant state and a varying state.
+            -- We assign each light to one of several groups, and then randomly start/stop cycling for each group.
+            local lightGroupIndex = math.random(1, NoPowerLightWorker.kNumGroups)
+            table.insert(self.lightGroups[lightGroupIndex].lights, renderLight)
+
+        end
+
+        SetLight(renderLight, intensity, color)
+
+    end
+
+    -- handle the light-cycling groups.
+    for _, lightGroup in ipairs(self.lightGroups) do
+        lightGroup:Run(timePassed)
+    end
+
+end
